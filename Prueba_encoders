@@ -1,0 +1,64 @@
+#define EncoderPinA 4
+#define EncoderPinB 13
+#define EncoderPinAB 27
+#define EncoderPinBB 14
+
+volatile long Encodervalue = 0;   // Contador para Motor A
+volatile long EncodervalueB = 0;  // Contador para Motor B
+
+// Declaración anticipada de las funciones
+void updateEncoderA();
+void updateEncoderB();
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Configuración Motor A
+  pinMode(EncoderPinA, INPUT_PULLUP);
+  pinMode(EncoderPinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(EncoderPinA), updateEncoderA, RISING);
+  
+  // Configuración Motor B
+  pinMode(EncoderPinAB, INPUT_PULLUP);
+  pinMode(EncoderPinBB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(EncoderPinAB), updateEncoderB, RISING);
+}
+
+void loop() {
+  static unsigned long lastPrint = 0;
+  
+  if (millis() - lastPrint > 100) {
+    lastPrint = millis();
+    
+    // Lectura segura de los contadores
+    long motorA, motorB;
+    noInterrupts();
+    motorA = Encodervalue;
+    motorB = EncodervalueB;
+    interrupts();
+    
+    Serial.print("Motor A: ");
+    Serial.print(motorA);
+    Serial.print(" pulsos | Motor B: ");
+    Serial.print(motorB);
+    Serial.println(" pulsos");
+  }
+}
+
+// Función de interrupción para Motor A
+void updateEncoderA() {
+  if (digitalRead(EncoderPinB) == LOW) {
+   Encodervalue = Encodervalue + 1;  // Dirección positiva
+  } else {
+    Encodervalue = Encodervalue - 1;  // Dirección negativa
+  }
+}
+
+// Función de interrupción para Motor B
+void updateEncoderB() {
+  if (digitalRead(EncoderPinBB) == LOW) {
+    EncodervalueB = EncodervalueB + 1;  // Dirección positiva
+  } else {
+   EncodervalueB = EncodervalueB - 1;  // Dirección negativa
+  }
+}
