@@ -3,6 +3,8 @@
 #define EncoderPinAB 27
 #define EncoderPinBB 14
 
+#include "driver/gpio.h"
+
 volatile long Encodervalue = 0;   // Contador para Motor A
 volatile long EncodervalueB = 0;  // Contador para Motor B
 
@@ -16,12 +18,12 @@ void setup() {
   // Configuración Motor A
   pinMode(EncoderPinA, INPUT_PULLUP);
   pinMode(EncoderPinB, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(EncoderPinA), updateEncoderA, RISING);
+  attachInterrupt(digitalPinToInterrupt(EncoderPinA), updateEncoderA, CHANGE);
   
   // Configuración Motor B
   pinMode(EncoderPinAB, INPUT_PULLUP);
   pinMode(EncoderPinBB, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(EncoderPinAB), updateEncoderB, RISING);
+  attachInterrupt(digitalPinToInterrupt(EncoderPinAB), updateEncoderB, CHANGE);
 }
 
 void loop() {
@@ -47,18 +49,17 @@ void loop() {
 
 // Función de interrupción para Motor A
 void updateEncoderA() {
-  if (digitalRead(EncoderPinB) == LOW) {
-   Encodervalue = Encodervalue + 1;  // Dirección positiva
+  if (gpio_get_level((gpio_num_t)EncoderPinB) == 0) {
+    Encodervalue = Encodervalue + 1;
   } else {
-    Encodervalue = Encodervalue - 1;  // Dirección negativa
+    Encodervalue = Encodervalue - 1;
   }
 }
 
-// Función de interrupción para Motor B
 void updateEncoderB() {
-  if (digitalRead(EncoderPinBB) == LOW) {
-    EncodervalueB = EncodervalueB + 1;  // Dirección positiva
+  if (gpio_get_level((gpio_num_t)EncoderPinBB) == 0) {
+    EncodervalueB = EncodervalueB + 1;
   } else {
-   EncodervalueB = EncodervalueB - 1;  // Dirección negativa
+    EncodervalueB = EncodervalueB - 1;
   }
 }
