@@ -1,0 +1,177 @@
+#include "driver/pcnt.h"
+
+// Pines de encoder
+#define ENCODER_A_PIN_A 4   // Motor A canal A
+#define ENCODER_A_PIN_B 13  // Motor A canal B
+#define ENCODER_B_PIN_A 27  // Motor B canal A
+#define ENCODER_B_PIN_B 14  // Motor B canal B
+#define ForwardPin 18
+#define BackwardPin 19
+#define EnablePin 32
+#define ForwardPinB 5
+#define BackwardPinB 17
+#define EnablePinB 16
+#define StandbyPin 23
+
+// Manejo de overflow
+volatile long encoderCountA = 0;
+volatile long encoderCountB = 0;
+
+
+// PID
+int angleError = 0;
+int oldAngleError = 0;
+int angleCorrection = 0;
+float distanceError = 0.4;
+float oldDistanceError = distanceError;
+float kPw = 1;
+float kDw = 0;
+float kPx = 1;
+float kDx = 0;
+float velocidad_1;
+float velocidad_2;
+float distanceCorrection;
+const int freq = 5000;
+const int pwmChannel = 0;
+const int resolution = 8;
+volatile long Encodervalue=0;
+volatile long EncodervalueB=0;
+
+
+// Función genérica para configurar un canal de PCNT
+void setupEncoder(pcnt_unit_t unit, int pinA, int pinB) {
+  pcnt_config_t pcnt_config = {};
+  pcnt_config.pulse_gpio_num = pinA;     // canal A
+  pcnt_config.ctrl_gpio_num = pinB;      // canal B
+  pcnt_config.channel = PCNT_CHANNEL_0;
+  pcnt_config.unit = unit;
+  pcnt_config.pos_mode = PCNT_COUNT_INC; // contar hacia adelante
+  pcnt_config.neg_mode = PCNT_COUNT_DEC; // contar hacia atrás
+  pcnt_config.lctrl_mode = PCNT_MODE_REVERSE; // invertir según canal B
+  pcnt_config.hctrl_mode = PCNT_MODE_KEEP;
+  pcnt_config.counter_h_lim = 32767;
+  pcnt_config.counter_l_lim = -32768;
+
+  pcnt_unit_config(&pcnt_config);
+
+  // Filtro opcional para rebote (valores <1000 ns suelen ser ruido)
+  pcnt_set_filter_value(unit, 1000);
+  pcnt_filter_enable(unit);
+
+  pcnt_counter_pause(unit);
+  pcnt_counter_clear(unit);
+  pcnt_counter_resume(unit);
+}
+
+// Función para leer un encoder y extender a 32 bits
+long readEncoder(pcnt_unit_t unit, volatile long &accumulated) {
+  int16_t count;
+  pcnt_get_counter_value(unit, &count);
+
+  accumulated += count;        // acumula ticks
+  pcnt_counter_clear(unit);    // reinicia contador hardware
+
+  return accumulated;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Motores:
+  pinMode(ForwardPin,OUTPUT);
+  pinMode(BackwardPin,OUTPUT);
+  pinMode(EnablePin,OUTPUT);
+  pinMode(ENCODER_A_PIN_A, INPUT);
+  pinMode(ENCODER_A_PIN_B, INPUT);
+  pinMode(ForwardPinB,OUTPUT);
+  pinMode(BackwardPinB,OUTPUT);
+  pinMode(EnablePinB,OUTPUT);
+  pinMode(ENCODER_B_PIN_A, INPUT);
+  pinMode(ENCODER_B_PIN_B, INPUT);
+  pinMode(StandbyPin, OUTPUT);
+  digitalWrite(StandbyPin, HIGH);
+  ledcAttach(EnablePin, freq, resolution);
+  ledcAttach(EnablePinB, freq, resolution);
+
+  // Configurar los dos encoders en unidades diferentes
+  setupEncoder(PCNT_UNIT_0, ENCODER_A_PIN_A, ENCODER_A_PIN_B);
+  setupEncoder(PCNT_UNIT_1, ENCODER_B_PIN_A, ENCODER_B_PIN_B);
+}
+
+void loop() {
+  static unsigned long lastPrint = 0;
+
+  if (millis() - lastPrint > 200) {
+    lastPrint = millis();
+
+    long motorA = -readEncoder(PCNT_UNIT_0, encoderCountA);
+    long motorB = readEncoder(PCNT_UNIT_1, encoderCountB);
+
+    PID(motorA,motorB);
+
+    Serial.print("Motor A: ");
+    Serial.print(motorA);
+    Serial.print(" ticks | Motor B: ");
+    Serial.println(motorB);
+  }
+}
+
+void PID(long pulsos_1,long pulsos_2) {
+
+    angleError = pulsos_1 + pulsos_2;
+    angleCorrection = kPw * angleError + kDw * (angleError - oldAngleError);
+    oldAngleError = angleError;
+
+    Serial.print("angle error: ");
+    Serial.print(angleError);
+
+    distanceError = 0.5;
+    distanceCorrection = kPx * distanceError + kDx * (distanceError - oldDistanceError);
+    oldDistanceError = distanceError;
+
+    velocidad_1 = distanceCorrection + angleCorrection;
+    velocidad_2 =  distanceCorrection - angleCorrection;
+
+    Serial.print("Velocidad_1: ");
+    Serial.print(velocidad_1);
+
+    Serial.print("velociad 2: ");
+    Serial.print(velocidad_2);
+
+    Motor(velocidad_1, velocidad_2);
+
+    
+  }
+
+
+
+//accionamiento motor izquierdo
+void Motorde(int value) {
+    if ( value >= 0 ) {
+      digitalWrite(ForwardPin, HIGH);
+      digitalWrite(BackwardPin, LOW);
+    } else {
+      digitalWrite(ForwardPin, LOW);
+      digitalWrite(BackwardPin, HIGH);
+      value = -1 * value;
+    }
+    ledcWrite(EnablePin, value);
+  }
+  
+  //accionamiento motor derecho
+  void Motoriz(int value) {
+    if ( value >= 0 ) {
+      digitalWrite(ForwardPinB,HIGH);
+      digitalWrite(BackwardPinB,LOW);
+    } else {
+      digitalWrite(ForwardPinB,LOW);
+      digitalWrite(BackwardPinB,HIGH);
+      value= -1 * value;
+    }
+    ledcWrite(EnablePinB, value);
+  }
+
+  //Accionamiento de motores
+  void Motor(int left, int right) {
+    Motoriz(right);
+    Motorde(left); }
